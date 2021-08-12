@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Jumbotron, Container, Col, Form, Button, Card, CardColumns } from 'react-bootstrap';
-import { useMutation } from '@apollo/react-hooks';
+
 import Auth from '../utils/auth';
+import { searchGoogleBooks } from '../utils/API';
 import { saveBookIds, getSavedBookIds } from '../utils/localStorage';
+
+import { useMutation } from '@apollo/client';
 import { SAVE_BOOK } from '../utils/mutations';
+
 const SearchBooks = () => {
   // create state for holding returned google api data
   const [searchedBooks, setSearchedBooks] = useState([]);
@@ -12,8 +16,9 @@ const SearchBooks = () => {
 
   // create state to hold saved bookId values
   const [savedBookIds, setSavedBookIds] = useState(getSavedBookIds());
-  // create saveBook mutation function
-  const [saveBook] = useMutation(SAVE_BOOK)
+
+  const [saveBook, { error }] = useMutation(SAVE_BOOK);
+
   // set up useEffect hook to save `savedBookIds` list to localStorage on component unmount
   // learn more here: https://reactjs.org/docs/hooks-effect.html#effects-with-cleanup
   useEffect(() => {
@@ -22,35 +27,35 @@ const SearchBooks = () => {
 
   // create method to search for books and set state on form submit
   const handleFormSubmit = async (event) => {
-      event.preventDefault();
+    event.preventDefault();
 
-      if (!searchInput) {
-        return false;
+    if (!searchInput) {
+      return false;
+    }
+
+    try {
+      const response = await searchGoogleBooks(searchInput);
+
+      if (!response.ok) {
+        throw new Error('something went wrong!');
       }
 
-      try {
-        const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${searchInput}`);
+      const { items } = await response.json();
 
-        if (!response.ok) {
-          throw new Error('something went wrong!');
-        }
+      const bookData = items.map((book) => ({
+        bookId: book.id,
+        authors: book.volumeInfo.authors || ['No author to display'],
+        title: book.volumeInfo.title,
+        description: book.volumeInfo.description,
+        image: book.volumeInfo.imageLinks?.thumbnail || '',
+      }));
 
-        const { items } = await response.json();
-
-        const bookData = items.map((book) => ({
-          bookId: book.id,
-          authors: book.volumeInfo.authors || ['No author to display'],
-          title: book.volumeInfo.title,
-          description: book.volumeInfo.description,
-          image: book.volumeInfo.imageLinks?.thumbnail || '',
-        }));
-
-        setSearchedBooks(bookData);
-        setSearchInput('');
-      } catch (error) {
-        console.error(error);
-      }
-    };
+      setSearchedBooks(bookData);
+      setSearchInput('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // create function to handle saving a book to our database
   const handleSaveBook = async (bookId) => {
@@ -63,14 +68,16 @@ const SearchBooks = () => {
     if (!token) {
       return false;
     }
-    //run saveBook resolver function with bookToSave args
+
     try {
-      const {data} = await saveBook({
-        variables: bookToSave
+      const { data } = await saveBook({
+        variables: { input: bookToSave }
       });
 
-      if (!data) {
-        throw new Error('something went wrong!');
+      console.log(data);
+
+      if (error) {
+        throw new Error('Something went wrong!');
       }
 
       // if book successfully saves to user's account, save book id to state
