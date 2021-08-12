@@ -62,7 +62,7 @@ const LoginForm = () => {
         variables: { ...userFormData },
       });
 
-      console.log(data);
+      console.log(data.login.token);
       Auth.login(data.login.token);
     } catch (e) {
       console.error(e);
